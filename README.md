@@ -1,5 +1,22 @@
 # Regression 2
 
+Live app: https://regression-v2.streamlit.app/
+
+Version 2.1 replaces the editable data grids with checkboxes and ordinary column
+selectors. Results and audits use escaped, scrollable HTML tables, avoiding the
+grid JavaScript module that failed to load in some browsers. On-screen tables
+preview at most 200 rows; downloadable reports contain the complete results.
+
+The analyte checklist always starts in this order: **RBC_3, WBC_2, PLT_3, HCT,
+HGB, MCV_3, RDW_3, MCH, MCHC, NEUT_2, LYPH_2, MXD_2**. Detected pairs are selected
+automatically; missing pairs remain unchecked until the user maps real columns.
+Uncheck any analyte to exclude it. Other detected analytes appear afterward, and
+custom mappings and regression groups can still be added. Analysis, result rows,
+and plot choices preserve the selected analyte order within each group.
+
+After an update, reload an already-open tab to load the new app. A browser holding
+the previous deployment may require Ctrl+Shift+R. The calculation methods are unchanged.
+
 A regression-only Streamlit app adapted from the active regression engine in the
 supplied `Interchangeability-App-main (8).zip`.
 
@@ -23,8 +40,8 @@ python -m streamlit run app.py
 Windows: double-click `run_local.bat` after installing Python. macOS/Linux:
 `bash run_local.sh`. The launchers install the requirements if needed.
 
-For Streamlit Community Cloud, upload **all three** of `app.py`,
-`regression_core.py`, and `retained_methods.py`, plus `requirements.txt` and
+For Streamlit Community Cloud, upload **all four** of `app.py`,
+`regression_core.py`, `retained_methods.py`, and `ui_controls.py`, plus `requirements.txt` and
 `sample_input_template.csv`. Select `app.py` as the main file. `run_app.py` and
 `streamlit_app.py` are alternative launch entry points. This package has not been
 deployed to an external hosting service in the original ZIP.
@@ -52,7 +69,7 @@ Save legacy `.xls` files as `.xlsx` first.
 - Measured/reference pairs such as `RBC` / `RBC_ref`, `PLT_2` / `PLT_ref`, and
   `PLT_3` / `PLT_ref` are detected automatically. Other markers with `_ref`,
   `_reference`, or recognized reference prefixes/suffixes work too. Use the
-  editable mapping table for arbitrary X and Y names. Each model has its own
+  column-mapping selectors for arbitrary X and Y names. Each model has its own
   result and can share a genuine reference column.
 - Donor, specimen, replicate, sample ID, batch ID, and global flag are detected
   where available. Review the mappings in the app. Original sample IDs such as

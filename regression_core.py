@@ -20,7 +20,7 @@ from threadpoolctl import threadpool_limits
 
 import retained_methods as original
 
-BUILD = "Regression 2 / 1.1"
+BUILD = "Regression 2 / 2.1"
 BOOTSTRAP_SEED = 20260722
 
 

@@ -15,7 +15,10 @@ from regression_core import (BUILD, analyze, default_groups, detect_metadata, de
                              diagnostic_figure, export_plots, export_workbook, prepare_metadata,
                              read_upload, regression_figure, validate_groups, validate_pairs)
 
+from ui_controls import pair_controls, group_controls, display_table, table_styles
+
 st.set_page_config(page_title="Regression 2", page_icon="📈", layout="wide")
+table_styles()
 st.title("Regression 2")
 st.caption("Huber regression · 95% confidence intervals for slope, intercept and Pearson’s R")
 
@@ -55,7 +58,7 @@ data = sheets[sheet]
 cols = [c for c in data if not c.startswith("__r2_")]
 st.caption(f"{len(data):,} rows · {len(cols):,} columns")
 with st.expander("Input preview"):
-    st.dataframe(data[cols].head(50), hide_index=True, use_container_width=True)
+    display_table(data[cols].head(50), hide_index=True, use_container_width=True)
 
 st.subheader("2. Data detection")
 detected = detect_metadata(data)
@@ -89,30 +92,17 @@ c.metric("Rows with global flag FALSE", int(prepared["global_flag_bool"].eq(Fals
 if (~prepared.parse_ok).any():
     st.warning(f"{int((~prepared.parse_ok).sum())} rows have missing/unparsed identities and will be excluded.")
 with st.expander("Donor identity audit"):
-    st.dataframe(prepared[["source_row", "source_batch_id", "bloodSampleId", "donor", "specimen_type", "replicate_number", "parse_ok"]], hide_index=True, use_container_width=True)
+    display_table(prepared[["source_row", "source_batch_id", "bloodSampleId", "donor", "specimen_type", "replicate_number", "parse_ok"]], hide_index=True, use_container_width=True)
 types = sorted(prepared.loc[prepared.parse_ok, "specimen_type"].astype(str).unique())
 donors = sorted(prepared.loc[prepared.parse_ok, "donor"].astype(str).unique())
 selected_donors = st.multiselect("Donors / samples to include", donors, default=donors, key=f"donors_{digest}_{sheet}")
 
 st.subheader("3. Measured and reference columns")
-st.caption("Common *_ref pairs and separate model columns are detected automatically. Add or edit rows for other datasets. X and Y must use compatible units.")
-pairs = detect_pairs(cols)
-if pairs.empty:
-    pairs = pd.DataFrame([{"Run": True, "Measured (Y)": None, "Reference (X)": None,
-                           "Unit": "", "Normal low": None, "Normal high": None}])
-edited_pairs = st.data_editor(pairs, num_rows="dynamic", hide_index=True, use_container_width=True,
-    key=f"pairs_{digest}_{sheet}", column_config={
-        "Run": st.column_config.CheckboxColumn(default=True),
-        "Measured (Y)": st.column_config.SelectboxColumn(options=cols, required=True),
-        "Reference (X)": st.column_config.SelectboxColumn(options=cols, required=True),
-        "Normal low": st.column_config.NumberColumn(help="Optional plot marker only; never filters data."),
-        "Normal high": st.column_config.NumberColumn(help="Optional plot marker only; never filters data."),
-    })
+edited_pairs = pair_controls(cols, f"pairs_{digest}_{sheet}")
 st.caption("Normal-range markers retain the source app’s defaults for recognized analytes. Edit or clear them for another population. They do not determine residual normality.")
 
 st.subheader("4. Regression groups and confidence intervals")
-group_table = st.data_editor(default_groups(types), num_rows="dynamic", hide_index=True, use_container_width=True,
-    key=f"groups_{digest}_{sheet}", column_config={"Run": st.column_config.CheckboxColumn(default=True)})
+group_table = group_controls(default_groups(types), types, f"groups_{digest}_{sheet}")
 st.caption("Mc and Mc2 are combined by default, as in the source app. Other specimen types retain separate groups.")
 a, b = st.columns(2)
 n_boot = a.number_input("Donor-level bootstrap resamples", min_value=200, max_value=20000, value=5000, step=200,
@@ -157,10 +147,10 @@ if not metrics.empty:
     statuses = metrics.loc[metrics.status.ne("OK"), ["analysis_group", "analyte", "status"]]
     if not statuses.empty:
         st.warning("Some results need review or have unavailable intervals. See status details below.")
-        st.dataframe(statuses, hide_index=True, use_container_width=True)
+        display_table(statuses, hide_index=True, use_container_width=True)
     primary = ["analysis_group", "analyte", "analysis_unit", "n_independent_units", "huber_slope", "huber_slope_ci95_low", "huber_slope_ci95_high",
                "huber_intercept", "huber_intercept_ci95_low", "huber_intercept_ci95_high", "pearson_r", "pearson_r_ci95_low", "pearson_r_ci95_high"]
-    st.dataframe(metrics[primary], hide_index=True, use_container_width=True)
+    display_table(metrics[primary], hide_index=True, use_container_width=True)
 st.download_button("Download Regression 2 Excel report", saved["workbook"], "Regression_2_Results.xlsx",
                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", type="primary")
 st.download_button("Download all regression metrics (CSV)", metrics.to_csv(index=False).encode(),
@@ -185,14 +175,14 @@ with tabs[0]:
             st.download_button("Download plots ZIP", st.session_state["regression_2_plots"], "Regression_2_Plots.zip", "application/zip")
 with tabs[1]:
     st.caption("Shapiro–Wilk is diagnostic. A non-significant p-value does not prove normality.")
-    st.dataframe(result["tables"]["Normality"], use_container_width=True, hide_index=True)
+    display_table(result["tables"]["Normality"], use_container_width=True, hide_index=True)
 with tabs[2]:
     for key in ["Outliers", "ESD Diagnostics", "global flag exclusions", "Selection Exclusions", "Missing Pairs", "Donor Means"]:
         with st.expander(key):
-            st.dataframe(result["tables"][key], use_container_width=True, hide_index=True)
+            display_table(result["tables"][key], use_container_width=True, hide_index=True)
 with tabs[3]:
-    st.dataframe(metrics, use_container_width=True, hide_index=True)
+    display_table(metrics, use_container_width=True, hide_index=True)
     st.caption("R² of the Huber fit, R² of the correlation, and the source app’s R² against identity have separate labels.")
 with tabs[4]:
-    st.dataframe(result["tables"]["Methods"], use_container_width=True, hide_index=True)
+    display_table(result["tables"]["Methods"], use_container_width=True, hide_index=True)
 st.caption(BUILD)
