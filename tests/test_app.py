@@ -13,6 +13,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from ui_controls import ANALYTE_ORDER, analyte_choices
 
 
+def finish_job(app):
+    job = app.session_state["regression_2_job"]
+    job.thread.join(timeout=80)
+    if job.thread.is_alive():
+        raise AssertionError("Analysis did not finish within 80 seconds")
+    app.run()
+
+
 class AppWorkflowTests(unittest.TestCase):
     def test_requested_order_missing_columns_and_extra_analytes(self):
         choices = analyte_choices(["Extra_ref", "MXD_ref", "PLT_ref", "MXD_2", "Extra", "PLT_3"])
@@ -40,6 +48,7 @@ class AppWorkflowTests(unittest.TestCase):
                     checkbox.uncheck()
             next(n for n in app.number_input if n.label == "Donor-level bootstrap resamples").set_value(200)
             next(b for b in app.button if b.label == "Run Regression 2").click().run()
+            finish_job(app)
             self.assertEqual(len(app.exception), 0)
             self.assertEqual(len(app.error), 0)
             metrics = app.session_state["regression_2_output"]["result"]["tables"]["Regression Results"]
@@ -48,6 +57,8 @@ class AppWorkflowTests(unittest.TestCase):
             self.assertTrue(any('r2-table-wrap' in element.value for element in app.markdown))
             next(c for c in app.checkbox if c.label == "Include PLT_3").uncheck().run()
             self.assertTrue(any("Settings or input changed" in item.value for item in app.info))
+            self.assertTrue(any(item.value == "Regression results" for item in app.subheader))
+            self.assertEqual(len(app.get("download_button")), 3)
 
     def test_manual_mapping_missing_analyte_and_custom_group(self):
         frame = pd.DataFrame({"Donor": ["A", "B", "C", "D"], "X": [1, 2, 3, 4], "Y": [2.1, 4.2, 6.1, 8.3]})
@@ -63,6 +74,7 @@ class AppWorkflowTests(unittest.TestCase):
             [s for s in app.multiselect if s.label == "Specimen types"][-1].set_value(["All"])
             next(n for n in app.number_input if n.label == "Donor-level bootstrap resamples").set_value(200)
             next(b for b in app.button if b.label == "Run Regression 2").click().run()
+            finish_job(app)
             self.assertEqual(len(app.exception), 0)
             self.assertEqual(len(app.error), 0)
             metrics = app.session_state["regression_2_output"]["result"]["tables"]["Regression Results"]
@@ -77,6 +89,7 @@ class AppWorkflowTests(unittest.TestCase):
         self.assertEqual(len(app.exception), 0)
         next(n for n in app.number_input if n.label == "Donor-level bootstrap resamples").set_value(200)
         next(b for b in app.button if b.label == "Run Regression 2").click().run()
+        finish_job(app)
         self.assertEqual(len(app.exception), 0)
         self.assertEqual(len(app.error), 0)
         saved = app.session_state["regression_2_output"]
