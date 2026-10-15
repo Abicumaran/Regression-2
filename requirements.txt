@@ -9,3 +9,5 @@ matplotlib==3.10.6
 scikit-learn==1.7.2
 threadpoolctl==3.6.0
 XlsxWriter==3.2.9
+# Match Community Cloud's working version; avoid the PyArrow 26 startup crash.
+pyarrow==24.0.0
