@@ -85,6 +85,10 @@ class AppWorkflowTests(unittest.TestCase):
         self.assertTrue(metrics["huber_slope"].notna().all())
         workbook = pd.read_excel(io.BytesIO(saved["workbook"]), sheet_name=None)
         self.assertIn("Regression Results", workbook)
+        self.assertIn("Bias Results", workbook)
+        self.assertTrue(metrics.bias.notna().all())
+        self.assertTrue(any("Bias — retained paired readings" in item.value for item in app.subheader))
+        self.assertTrue(any("Absolute bias (%)" in item.value for item in app.markdown))
         next(b for b in app.button if b.label.startswith("Prepare all plots")).click().run()
         self.assertEqual(len(app.exception), 0)
         with zipfile.ZipFile(io.BytesIO(app.session_state["regression_2_plots"])) as plots:
