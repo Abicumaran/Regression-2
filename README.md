@@ -27,7 +27,21 @@ For Streamlit Community Cloud, upload **all three** of `app.py`,
 `regression_core.py`, and `retained_methods.py`, plus `requirements.txt` and
 `sample_input_template.csv`. Select `app.py` as the main file. `run_app.py` and
 `streamlit_app.py` are alternative launch entry points. This package has not been
-deployed to an external hosting service.
+deployed to an external hosting service in the original ZIP.
+
+### Streamlit Community Cloud deployment
+
+Use repository `Abicumaran/Regression-2`, branch `main`, and main file `app.py`.
+Before deploying, open **Advanced settings**, select **Python 3.12**, and save.
+The pinned NumPy, pandas, and SciPy releases in this project are not intended for
+Python 3.14. A newer interpreter can trigger failed source builds instead of
+installing compatible prebuilt wheels. Installing a compiler is not the fix.
+
+The `.python-version` file records the local runtime target; it does **not**
+replace the Python version selection in Streamlit Community Cloud. For an
+existing deployment on the wrong Python version, follow Streamlit's documented
+delete-and-redeploy procedure, preserving the repository and deployment settings:
+https://docs.streamlit.io/deploy/streamlit-community-cloud/manage-your-app/upgrade-python
 
 ## Input
 
