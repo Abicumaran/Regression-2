@@ -20,7 +20,7 @@ from threadpoolctl import threadpool_limits
 
 import retained_methods as original
 
-BUILD = "Regression 2 / 2.1"
+BUILD = "Regression 2 / 2.2"
 BOOTSTRAP_SEED = 20260722
 
 
@@ -249,10 +249,40 @@ def normality(values, group, analyte, stage):
     return row
 
 
+def bias_metrics(true_values, pred_values):
+    """Signed mean difference and ratio-of-means percentage from the supplied formula."""
+    x, y = np.asarray(true_values, dtype=float), np.asarray(pred_values, dtype=float)
+    if x.ndim != 1 or y.ndim != 1 or x.shape != y.shape:
+        raise ValueError("Bias requires equal-length one-dimensional paired arrays.")
+    finite = np.isfinite(x) & np.isfinite(y)
+    x, y = x[finite], y[finite]
+    result = dict(n_bias_pairs=len(x), mean_true=np.nan, bias=np.nan,
+                  bias_percent=np.nan, abs_bias_percent=np.nan, bias_status="OK")
+    if not len(x):
+        result["bias_status"] = "Unavailable: no retained finite pairs"
+        return result
+    with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+        mean_true, bias = float(np.mean(x)), float(np.mean(y - x))
+        percent = (bias / mean_true) * 100 if mean_true != 0 else np.nan
+    result.update(mean_true=mean_true if np.isfinite(mean_true) else np.nan,
+                  bias=bias if np.isfinite(bias) else np.nan)
+    if not np.isfinite(mean_true) or not np.isfinite(bias):
+        result["bias_status"] = "Unavailable: numerical overflow in mean or difference"
+    elif mean_true == 0:
+        result["bias_status"] = "Percentage unavailable: mean reference is zero"
+    elif not np.isfinite(percent):
+        result["bias_status"] = "Percentage unavailable: numerical overflow"
+    else:
+        result.update(bias_percent=float(percent), abs_bias_percent=float(abs(percent)))
+    return result
+
+
 def regression_metrics(x, y, group, analyte, reference, unit, n_boot):
     n = len(x)
     row = {"analysis_group": group, "analyte": analyte, "reference_column": reference,
            "unit": unit, "n_donors": n}
+    row.update(bias_metrics([], []))
+    row.update({f"donor_mean_{key}": value for key, value in bias_metrics(x, y).items()})
     names = ["huber_slope", "huber_slope_ci95_low", "huber_slope_ci95_high", "huber_intercept",
              "huber_intercept_ci95_low", "huber_intercept_ci95_high", "pearson_r", "pearson_r_ci95_low",
              "pearson_r_ci95_high", "pearson_p", "pearson_r_squared", "huber_fit_r_squared",
@@ -340,6 +370,7 @@ def analyze(data, prepared, pairs, groups, donors=None, n_boot=5000, progress=No
             if len(complete) >= 20 and (complete[["__r2_x", "__r2_y"]] <= -10001).any().any():
                 row = regression_metrics(np.array([]), np.array([]), group, ycol, xcol, unit, n_boot)
                 row["status"] = "Not analyzed: inherited ESD log1p(value + 10000) requires values > -10001"
+                row["bias_status"] = "Unavailable: analyte not analyzed because of ESD transformation domain"
                 frames["Regression Results"].append(pd.DataFrame([row]))
             else:
                 removed, diagnostic = original.detect_esd_outliers(work, group, analytes=cfg)
@@ -356,6 +387,9 @@ def analyze(data, prepared, pairs, groups, donors=None, n_boot=5000, progress=No
                     means = means.merge(counts, on="Donor", how="left").dropna(subset=["__r2_x", "__r2_y"])
                 x, y = means["__r2_x"].to_numpy(float), means["__r2_y"].to_numpy(float)
                 row = regression_metrics(x, y, group, ycol, xcol, unit, n_boot)
+                removed_ids = set(removed.loc[removed["analyte"].eq(ycol), "batch_id"].astype(str)) if not removed.empty else set()
+                retained = complete.loc[~complete["batch_id"].astype(str).isin(removed_ids)]
+                row.update(bias_metrics(retained["__r2_x"].to_numpy(float), retained["__r2_y"].to_numpy(float)))
                 row.update(n_complete_replicates=len(complete), n_esd_removed=len(removed), n_missing_pairs=len(missing))
                 frames["Regression Results"].append(pd.DataFrame([row]))
                 means = means.rename(columns={"__r2_x": "reference_mean", "__r2_y": "measured_mean", f"{ycol}_n": "retained_replicates"})
@@ -377,6 +411,10 @@ def analyze(data, prepared, pairs, groups, donors=None, n_boot=5000, progress=No
     analysis_unit = "sample ID" if prepared["donor_identity_rule"].eq("full_sample").all() else "input row" if prepared["donor_identity_rule"].eq("row").all() else "donor/sample identity"
     tables["Regression Results"]["analysis_unit"] = analysis_unit
     tables["Regression Results"]["n_independent_units"] = tables["Regression Results"]["n_donors"]
+    bias_columns = ["analysis_group", "analyte", "reference_column", "unit", "n_bias_pairs",
+                    "mean_true", "bias", "bias_percent", "abs_bias_percent", "bias_status"]
+    tables["Bias Results"] = tables["Regression Results"][bias_columns + [
+        f"donor_mean_{key}" for key in ("n_bias_pairs", "mean_true", "bias", "bias_percent", "abs_bias_percent", "bias_status")]].copy()
     tables["Methods"] = pd.DataFrame([
         ("App", BUILD), ("Regression direction", "X = reference; Y = measured; fit on retained paired donor means"),
         ("Grouping unit", f"{analysis_unit}; identity rule: {', '.join(prepared['donor_identity_rule'].unique())}. n_independent_units is the number of paired means. n_donors and Donor Means are retained legacy field/sheet names and do not verify donor independence."),
@@ -389,6 +427,9 @@ def analyze(data, prepared, pairs, groups, donors=None, n_boot=5000, progress=No
         ("Normality", "Shapiro-Wilk alpha 0.05 on raw paired differences and final Huber residuals; diagnostic only. The original regression ESD branch does not switch to Grubbs/MAD."),
         ("R-squared definitions", "pearson_r_squared = R²; huber_fit_r_squared = 1-SSE(Y, fitted Y)/SST(Y). Legacy r_squared_vs_identity = sklearn.r2_score(X,Y). These are distinct."),
         ("RMSE definitions", "huber_fit_rmse compares Y to fitted Y; legacy rmse_vs_identity compares Y to X."),
+        ("Bias definitions", "bias = mean(measured - reference); mean_true = mean(reference); bias_percent = 100 * bias / mean_true; abs_bias_percent = abs(bias_percent). Positive bias means measured values are higher. These are measured readings, not fitted Huber predictions; absolute bias percent is not mean absolute percentage error."),
+        ("Bias populations", "Unprefixed bias metrics use retained complete paired replicate readings after selection, global-flag filtering and analyte-specific ESD removal. Each reading has equal weight. donor_mean_* metrics use the retained paired means used for Huber regression, weighting each donor/sample equally. The two can differ when replicate counts differ."),
+        ("Bias availability", "Bias requires at least one finite retained pair and is available for constant X/Y even when regression is unavailable. Zero mean reference leaves percentage metrics blank with an explicit bias_status. Bias uses the input measurement unit; percentages use 100 times the ratio of means, not the mean of individual percentage errors."),
         ("Independence", "Each donor contributes one paired mean within a group. Row-as-donor mode assumes independent input rows. Overlapping groups are separate analyses, not independent cohorts."),
         ("CI interpretation", "Bootstrap intervals are conditional on selected rows and ESD removals; uncertainty from outlier selection is not re-estimated. Fitting warnings and successful resample counts are reported."),
         ("Missing results", "Unavailable estimates stay blank/NaN with a status. Correlation and robust regression do not alone establish interchangeability."),

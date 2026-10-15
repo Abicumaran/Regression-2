@@ -33,6 +33,12 @@ with st.expander("Analysis method"):
     Shapiro–Wilk results and residual/Q-Q plots are diagnostics; they do not change the
     original regression estimator or ESD rule. At least four independent donor pairs are
     required for the confidence intervals. Missing estimates remain blank with an explanation.
+
+    Bias is **mean(measured − reference)**. Bias (%) divides that signed bias by
+    the mean reference value and multiplies by 100; absolute bias (%) is its absolute value.
+    The main bias table uses retained paired readings after filtering and ESD. A separate
+    donor-mean table uses the same paired means as the regression. These calculations
+    compare measured values with references, not predictions from the fitted Huber line.
     """)
 
 sample_path = Path(__file__).with_name("sample_input_template.csv")
@@ -144,6 +150,23 @@ st.divider()
 st.subheader("Regression results")
 metrics = result["tables"]["Regression Results"]
 if not metrics.empty:
+    if "bias" in metrics:
+        st.subheader("Bias — retained paired readings")
+        st.caption("Positive bias means measured values are higher than the reference. Bias (%) = 100 × mean(measured − reference) / mean(reference). Absolute bias (%) = |bias (%)|. Percentages are unavailable when mean reference is zero.")
+        bias_columns = ["analysis_group", "analyte", "unit", "n_bias_pairs", "mean_true", "bias", "bias_percent", "abs_bias_percent", "bias_status"]
+        bias_labels = {"analysis_group": "Group", "analyte": "Analyte", "unit": "Unit",
+                       "n_bias_pairs": "Paired readings", "mean_true": "Mean reference", "bias": "Bias",
+                       "bias_percent": "Bias (%)", "abs_bias_percent": "Absolute bias (%)", "bias_status": "Status"}
+        display_table(metrics[bias_columns].rename(columns=bias_labels))
+        with st.expander("Bias on donor means — same population as the regression"):
+            st.caption("Each retained donor/sample contributes one paired mean. This can differ from reading-level bias when replicate counts differ.")
+            donor_columns = ["analysis_group", "analyte", "unit"] + [f"donor_mean_{key}" for key in bias_columns[3:]]
+            donor_labels = {**bias_labels, **{f"donor_mean_{key}": value for key, value in bias_labels.items()}}
+            donor_labels["donor_mean_n_bias_pairs"] = "Paired donor means"
+            display_table(metrics[donor_columns].rename(columns=donor_labels))
+    else:
+        st.info("Run Regression 2 again to calculate bias for these saved results.")
+    st.subheader("Regression estimates")
     statuses = metrics.loc[metrics.status.ne("OK"), ["analysis_group", "analyte", "status"]]
     if not statuses.empty:
         st.warning("Some results need review or have unavailable intervals. See status details below.")

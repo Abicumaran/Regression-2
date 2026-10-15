@@ -2,6 +2,22 @@
 
 Live app: https://regression-v2.streamlit.app/
 
+Version 2.2 adds signed bias, bias percentage, and absolute bias percentage to the
+results screen, metrics CSV, and a dedicated **Bias Results** Excel sheet.
+For retained measured/reference pairs: `bias = mean(measured - reference)`,
+`mean_true = mean(reference)`, `bias_percent = 100 * bias / mean_true`, and
+`abs_bias_percent = abs(bias_percent)`. Positive bias means measured values are
+higher. Absolute bias percent is the absolute aggregate bias percentage, not the
+mean of absolute individual errors.
+
+The main table uses retained paired readings after global-flag filtering and
+analyte-specific ESD removal. A separately labelled donor-mean table uses the same
+paired means as regression; these weight each donor/sample equally and can differ
+when replicate counts differ. Exports distinguish these with `donor_mean_*`
+column names. Bias needs at least one finite pair and remains available when
+constant values prevent regression. A zero mean reference leaves the percentages
+blank with an explicit status. Input pairs must use compatible units.
+
 Version 2.1 replaces the editable data grids with checkboxes and ordinary column
 selectors. Results and audits use escaped, scrollable HTML tables, avoiding the
 grid JavaScript module that failed to load in some browsers. On-screen tables
@@ -148,9 +164,9 @@ from silently changing the wrong records.
 
 ## Downloads
 
-- `Regression_2_Results.xlsx`: regression estimates and all CI bounds, donor means,
+- `Regression_2_Results.xlsx`: regression estimates and all CI bounds, bias results, donor means,
   outlier and exclusion audits, ESD diagnostics, normality, mappings, and methods.
-- `Regression_2_Metrics.csv`: the full regression metrics table.
+- `Regression_2_Metrics.csv`: the full regression and bias metrics table.
 - `Regression_2_Plots.zip`: individual regression and diagnostic plots, plus
   combined regression panels, as 300-dpi PNG and vector PDF files.
 
