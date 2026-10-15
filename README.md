@@ -56,7 +56,7 @@ python -m streamlit run app.py
 Windows: double-click `run_local.bat` after installing Python. macOS/Linux:
 `bash run_local.sh`. The launchers install the requirements if needed.
 
-For Streamlit Community Cloud, upload **all four** of `app.py`,
+For Streamlit Community Cloud, upload `app.py`, `analysis_job.py`, `results_ui.py`,
 `regression_core.py`, `retained_methods.py`, and `ui_controls.py`, plus `requirements.txt` and
 `sample_input_template.csv`. Select `app.py` as the main file. `run_app.py` and
 `streamlit_app.py` are alternative launch entry points. This package has not been
@@ -170,8 +170,19 @@ from silently changing the wrong records.
 - `Regression_2_Plots.zip`: individual regression and diagnostic plots, plus
   combined regression panels, as 300-dpi PNG and vector PDF files.
 
-Plots are generated on request after the analysis. Changed input/settings hide
-stale results until the analysis is rerun. The app writes no uploaded data to an
+Plots are generated on request after the analysis. Completed results are retained
+in the current browser session and remain visible if controls or input change,
+with an explicit warning that they use the previous settings. An analysis runs in
+a session-owned worker, so normal widget reruns do not interrupt it or start a
+duplicate job. Its inputs are captured when Run is clicked. Progress is polled
+until completion; errors are shown explicitly and the last successful result is
+preserved. Results are saved before Excel export; an export or plot failure does
+not erase tables or CSV downloads. Downloads do not restart the analysis.
+
+Use **Download Regression 2 Excel report** or the CSV button for a permanent
+Windows-friendly file. Session memory is not durable storage: a full browser
+reload, closed tab, expired session, deployment or server restart can clear it.
+No completed analysis can be recovered after a server restart unless downloaded. The app writes no uploaded data to an
 external service itself; data are processed in the running Streamlit server.
 
 ## Verification

@@ -1,19 +1,17 @@
 from __future__ import annotations
 
 import hashlib
-import io
 import json
 import sys
 from pathlib import Path
 
-import matplotlib.pyplot as plt
-import pandas as pd
 import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from regression_core import (BUILD, analyze, default_groups, detect_metadata, detect_pairs,
-                             diagnostic_figure, export_plots, export_workbook, prepare_metadata,
-                             read_upload, regression_figure, validate_groups, validate_pairs)
+from regression_core import (default_groups, detect_metadata, prepare_metadata,
+                             read_upload, validate_groups, validate_pairs)
+from analysis_job import AnalysisJob
+from results_ui import show_results
 
 from ui_controls import pair_controls, group_controls, display_table, table_styles
 
@@ -49,6 +47,7 @@ uploaded = st.file_uploader("1. Upload an Excel workbook or CSV", type=["xlsx", 
 demo = st.checkbox("Try the synthetic example", value=False) if uploaded is None else False
 if uploaded is None and not demo:
     st.info("Upload data with measured columns and their matched reference columns, such as PLT_3 and PLT_ref. Other names can be mapped below.")
+    show_results()
     st.stop()
 
 name = uploaded.name if uploaded else sample_path.name
@@ -58,6 +57,7 @@ try:
     sheets = read_upload(name, payload)
 except Exception as exc:
     st.error(str(exc))
+    show_results()
     st.stop()
 sheet = st.selectbox("Worksheet", list(sheets), key=f"sheet_{digest}")
 data = sheets[sheet]
@@ -88,6 +88,7 @@ try:
     prepared, notices = prepare_metadata(data, mapping, identities[identity_label])
 except Exception as exc:
     st.error(str(exc))
+    show_results()
     st.stop()
 for notice in notices:
     st.info(notice)
@@ -119,93 +120,22 @@ st.caption("Automatic generalized ESD is enabled. For tested subsets with fewer 
 signature = hashlib.sha256(json.dumps({"input": digest, "sheet": sheet, "mapping": mapping,
     "identity": identities[identity_label], "donors": selected_donors, "pairs": edited_pairs.to_json(),
     "groups": group_table.to_json(), "n_boot": n_boot, "ranges": show_ranges}, sort_keys=True).encode()).hexdigest()
-run = st.button("Run Regression 2", type="primary", use_container_width=True)
-if run:
+job = st.session_state.get("regression_2_job")
+busy = job is not None and not job.snapshot()["done"]
+run = st.button("Run Regression 2", type="primary", use_container_width=True, disabled=busy)
+if run and not busy:
     try:
         selected_pairs = validate_pairs(edited_pairs, cols)
         groups = validate_groups(group_table, types)
         if not selected_donors:
             raise ValueError("Select at least one donor/sample.")
-        progress = st.progress(0, text="Starting regression analysis…")
-        with st.spinner("Fitting Huber models and calculating confidence intervals…"):
-            result = analyze(data, prepared, selected_pairs, groups, selected_donors, int(n_boot),
-                             progress=lambda value, text: progress.progress(value, text=text))
-            result["tables"]["Methods"].loc[len(result["tables"]["Methods"])] = ["Input", f"{name}; worksheet {sheet}; SHA256 {digest}"]
-            workbook = export_workbook(result)
-        st.session_state["regression_2_output"] = {"signature": signature, "result": result, "workbook": workbook}
-        st.session_state.pop("regression_2_plots", None)
-        progress.empty()
+        job = AnalysisJob(data, prepared, selected_pairs, groups, selected_donors, int(n_boot),
+                          signature=signature, source=f"{name}; worksheet {sheet}; SHA256 {digest}",
+                          show_ranges=show_ranges)
+        st.session_state["regression_2_job"] = job
+        job.start()
+        st.rerun()
     except Exception as exc:
-        st.error(f"Analysis could not finish: {exc}")
-        st.stop()
+        st.error(f"Analysis could not start: {exc}")
 
-saved = st.session_state.get("regression_2_output")
-if not saved:
-    st.stop()
-if saved["signature"] != signature:
-    st.info("Settings or input changed. Run Regression 2 again to refresh the results and downloads.")
-    st.stop()
-result = saved["result"]
-st.divider()
-st.subheader("Regression results")
-metrics = result["tables"]["Regression Results"]
-if not metrics.empty:
-    if "bias" in metrics:
-        st.subheader("Bias — retained paired readings")
-        st.caption("Positive bias means measured values are higher than the reference. Bias (%) = 100 × mean(measured − reference) / mean(reference). Absolute bias (%) = |bias (%)|. Percentages are unavailable when mean reference is zero.")
-        bias_columns = ["analysis_group", "analyte", "unit", "n_bias_pairs", "mean_true", "bias", "bias_percent", "abs_bias_percent", "bias_status"]
-        bias_labels = {"analysis_group": "Group", "analyte": "Analyte", "unit": "Unit",
-                       "n_bias_pairs": "Paired readings", "mean_true": "Mean reference", "bias": "Bias",
-                       "bias_percent": "Bias (%)", "abs_bias_percent": "Absolute bias (%)", "bias_status": "Status"}
-        display_table(metrics[bias_columns].rename(columns=bias_labels))
-        with st.expander("Bias on donor means — same population as the regression"):
-            st.caption("Each retained donor/sample contributes one paired mean. This can differ from reading-level bias when replicate counts differ.")
-            donor_columns = ["analysis_group", "analyte", "unit"] + [f"donor_mean_{key}" for key in bias_columns[3:]]
-            donor_labels = {**bias_labels, **{f"donor_mean_{key}": value for key, value in bias_labels.items()}}
-            donor_labels["donor_mean_n_bias_pairs"] = "Paired donor means"
-            display_table(metrics[donor_columns].rename(columns=donor_labels))
-    else:
-        st.info("Run Regression 2 again to calculate bias for these saved results.")
-    st.subheader("Regression estimates")
-    statuses = metrics.loc[metrics.status.ne("OK"), ["analysis_group", "analyte", "status"]]
-    if not statuses.empty:
-        st.warning("Some results need review or have unavailable intervals. See status details below.")
-        display_table(statuses, hide_index=True, use_container_width=True)
-    primary = ["analysis_group", "analyte", "analysis_unit", "n_independent_units", "huber_slope", "huber_slope_ci95_low", "huber_slope_ci95_high",
-               "huber_intercept", "huber_intercept_ci95_low", "huber_intercept_ci95_high", "pearson_r", "pearson_r_ci95_low", "pearson_r_ci95_high"]
-    display_table(metrics[primary], hide_index=True, use_container_width=True)
-st.download_button("Download Regression 2 Excel report", saved["workbook"], "Regression_2_Results.xlsx",
-                   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", type="primary")
-st.download_button("Download all regression metrics (CSV)", metrics.to_csv(index=False).encode(),
-                   "Regression_2_Metrics.csv", "text/csv")
-tabs = st.tabs(["Plots", "Normality", "Outliers and exclusions", "All metrics", "Methods"])
-with tabs[0]:
-    if result["plots"]:
-        choice = st.selectbox("Plot", range(len(result["plots"])),
-            format_func=lambda i: f"{result['plots'][i]['row']['analysis_group']} — {result['plots'][i]['row']['analyte']}")
-        item = result["plots"][choice]
-        fig = regression_figure(item, show_ranges)
-        st.pyplot(fig, use_container_width=False)
-        plt.close(fig)
-        with st.expander("Residual and Q-Q plots"):
-            fig = diagnostic_figure(item)
-            st.pyplot(fig)
-            plt.close(fig)
-        if st.button("Prepare all plots (PNG + PDF, individual + panels)"):
-            with st.spinner("Preparing plots…"):
-                st.session_state["regression_2_plots"] = export_plots(result, show_ranges)
-        if "regression_2_plots" in st.session_state:
-            st.download_button("Download plots ZIP", st.session_state["regression_2_plots"], "Regression_2_Plots.zip", "application/zip")
-with tabs[1]:
-    st.caption("Shapiro–Wilk is diagnostic. A non-significant p-value does not prove normality.")
-    display_table(result["tables"]["Normality"], use_container_width=True, hide_index=True)
-with tabs[2]:
-    for key in ["Outliers", "ESD Diagnostics", "global flag exclusions", "Selection Exclusions", "Missing Pairs", "Donor Means"]:
-        with st.expander(key):
-            display_table(result["tables"][key], use_container_width=True, hide_index=True)
-with tabs[3]:
-    display_table(metrics, use_container_width=True, hide_index=True)
-    st.caption("R² of the Huber fit, R² of the correlation, and the source app’s R² against identity have separate labels.")
-with tabs[4]:
-    display_table(result["tables"]["Methods"], use_container_width=True, hide_index=True)
-st.caption(BUILD)
+show_results(signature)
