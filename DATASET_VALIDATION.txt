@@ -1,0 +1,59 @@
+Regression 2 version 1.1 — actual workbook validation
+
+Input: New App example_for Abi.xlsx / Raw data
+SHA256: 7dd71d9f04a7e351ef5572ec32723ac1974edc019c6547d269a6b14e62e8d77d
+
+Compatibility correction:
+The original default ID detection recognized only 74 rows and 4 truncated IDs.
+It would exclude 503 rows because their sample labels lacked a D-token and could
+combine different -Hg- levels under the same truncated identity. Version 1.1
+uses the full bloodSampleId for this workbook and retains all 577 identities
+before quality filtering. Original structured D01-Mc-1 IDs remain supported.
+
+Input accounting:
+- 577 raw replicate rows, 91 full sample IDs, 24 measured/reference pairs.
+- 190 global_flag TRUE rows excluded, leaving 387 rows across 66 sample IDs.
+- 25 sample IDs have all readings flagged; none are invented or filled in.
+- 0 unparsed identity exclusions with corrected automatic detection.
+- 65–66 sample means per regression after analyte-specific ESD.
+- The one blank-string LYMPH_ref value is in a globally flagged row. No
+  additional eligible rows are excluded for missing/non-numeric pairs.
+- One repeated source batch ID (an exact duplicate row) is retained, matching the
+  original no-deduplication rule. Each input row has a unique internal removal ID.
+- 75 source rows have reference_match_count=2. Supplied reference values are used
+  unchanged; external reference matching has not been independently repeated.
+
+Numerical verification:
+- All 24 models produce finite, ordered 95% confidence intervals for slope,
+  intercept and Pearson R.
+- 5,000 paired bootstrap resamples requested per model (120,000 total).
+- 119,998 successful fits: PLT has 4,998, all other models have 5,000.
+  The two failed PLT resamples are skipped and counted as in the original method.
+- 0 optimizer convergence warnings among retained fits.
+- All 1581 paired sample means and retained-replicate counts independently
+  reconstructed from source values and the recorded outlier exclusions.
+- All six CI-bound columns survive Excel export/reload within 1e-12.
+- All 19 retained source statistical/helper functions remain unchanged.
+
+Workflow checks:
+- 15 automated tests pass, including mixed IDs, numeric suffixes conflicting
+  with Replicate=1, and preservation of legacy structured-ID averaging.
+- Actual workbook tested through Streamlit AppTest with 200 resamples/model.
+  All 24 results and the Excel export render without app exceptions or errors.
+  Input detection reports 91 IDs and 387 global_flag FALSE rows correctly.
+- Changing settings hides stale results until rerun.
+- Huber fits now use one numerical-library thread to avoid thread overhead.
+  The 200-resample interface validation completed in 21.54 seconds in this runtime.
+- A real-data regression plot was visually verified; estimates and CI labels
+  are readable and do not overlap the data.
+
+Interpretation of the statistical unit:
+The workbook contains no verified donor column. Full sample IDs, not verified
+unique donors, are treated as independent units for CIs. If different IDs/levels
+share a biological donor, provide the donor mapping before interpreting these
+as donor-level confidence intervals. The app's legacy n_donors/Donor Means
+labels do not establish independence; analysis_unit and n_independent_units
+now explicitly record the grouping used.
+
+Runtime: Python 3.12, Streamlit 1.45.1, numpy 2.3.5, pandas 2.2.3, scipy 1.17.0,
+scikit-learn 1.8.0, matplotlib 3.10.8, threadpoolctl 3.6.0.

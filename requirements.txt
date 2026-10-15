@@ -1,0 +1,11 @@
+# Tested runtime target: CPython 3.10-3.13; recommend Python 3.12.
+# Keep app.py, regression_core.py and retained_methods.py together.
+streamlit==1.45.1
+pandas==2.2.3
+numpy==2.2.6
+scipy==1.15.3
+openpyxl==3.1.5
+matplotlib==3.10.6
+scikit-learn==1.7.2
+threadpoolctl==3.6.0
+XlsxWriter==3.2.9

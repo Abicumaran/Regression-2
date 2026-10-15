@@ -1,0 +1,44 @@
+Regression 2 — initial version 1.0 validation (synthetic data)
+
+Source: active bundled engine in supplied Interchangeability-App-main (8).zip.
+19 retained function definitions are structurally identical to that active engine.
+
+Direct parity run: 100 bootstrap resamples per analyte/group, source seed 20260722.
+The following matched within 1e-12: Huber slope/intercept, their four CI bounds,
+Pearson R and p, both Fisher-z CI bounds, legacy identity R-squared and RMSE.
+Removed-row IDs from generalized ESD matched exactly. All comparisons used the
+same filtered raw data and independent paired donor means.
+
+Capillary_Mc_Mc2 / RBC: 24 donors, 0 ESD removals; all 12 metrics matched.
+Capillary_Mc_Mc2 / PLT_3: 24 donors, 0 ESD removals; all 12 metrics matched.
+Venous_MK2 / RBC: 24 donors, 1 ESD removals; all 12 metrics matched.
+Venous_MK2 / PLT_3: 24 donors, 0 ESD removals; all 12 metrics matched.
+
+12 automated tests passed:
+- Fisher-z bounds agree with scipy.stats.pearsonr.confidence_interval.
+- Known straight-line recovery and fitted-versus-identity metric distinction.
+- Pairwise complete-case averaging, TRUE/unknown flags and missing measurements.
+- Separate model variants sharing one reference column.
+- Explicit status for small/constant samples.
+- Collection-prefix collision handling and unique internal replicate IDs.
+- Arbitrary X/Y mappings with independent-row fallback.
+- Generic sample IDs with an explicit donor column.
+- Repeatable bootstrap intervals and ordered bounds.
+- Explicit error for unsupported ESD transformation domain.
+- Excel export and Excel worksheet reading.
+- A fully flagged group reports unavailable without interrupting valid groups.
+
+Streamlit AppTest: start screen, synthetic input, 200-resample complete analysis,
+results rendering, no app exceptions/errors, and stale-output hiding after changing
+settings all passed. Four analyte/group results each used 24 donor means.
+
+PNG/PDF regression and diagnostic exports were generated. Individual and combined
+regression figures were visually checked; CI captions are outside plotting axes.
+
+Validation runtime: Python 3.12; Streamlit 1.45.1; pandas 2.2.3; numpy 2.3.5;
+scipy 1.17.0; scikit-learn 1.8.0; matplotlib 3.10.8; openpyxl 3.1.5;
+XlsxWriter 3.2.9. The source application's pinned requirements are retained for
+installation. Full scientific validation on a user's new study data is separate
+from these code-parity and workflow checks. No study measurements were supplied with the initial source ZIP; those initial
+checks used synthetic data. Version 1.1 has subsequently been checked on the
+user-supplied workbook; see DATASET_VALIDATION.txt for the current validation.
